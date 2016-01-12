@@ -32,7 +32,7 @@ Names={"White1":"The Initial Entry","BridgeA1":"Beyond the Walls", "BridgeA2":"A
 #Boring UI stuff
 root = Tk()
 root.minsize(500, 300)
-root.wm_title("Cloudbuilt Leaderboardinator 2.0")
+root.wm_title("Cloudbuilt Leaderboardinator 2.1")
 cent=IntVar()
 dawn=IntVar()
 storm=IntVar()
@@ -149,26 +149,49 @@ def GlobalLeaderboards():
     n=int(num.get().strip())
     Hackers=hack.get().strip().split(',')
     PlayerList=Counter()  
+    FullPlayerList = dict()
     Levels=GetLevels()
     f = file("leaderboard.txt","w")
     leaderboards=GetLeaderboardURL(Levels)
     #Read leaderboard data and fetch players
     for name, url in leaderboards.iteritems(): 
-        StatusUpdate("Analysing "+Names[name.strip().replace('Normal','')]+"...")
-        i=1
-        LBData=LoadPage(url)
-        for entry in LBData.find('entries').findall('entry'):
-            pid=entry.find('steamid').text
-            if not any([pid==stuff for stuff in Hackers]):
-                PlayerList[pid]=1
-                i+=1
-            if i>2*n:
-                break
+        levname = name.strip().replace('Normal','')
+        StatusUpdate("Analysing " + Names[levname] + "...")
+        nexturl=url
+        while nexturl!='':
+            LBData=LoadPage(nexturl)
+            next = LBData.find('nextRequestURL')
+            if next is not None:
+                nexturl = next.text
+            else:
+                nexturl = ''
+            
+            root.update_idletasks()
+            
+            for entry in LBData.find('entries').findall('entry'):
+                pid=entry.find('steamid').text
+                if not any([pid==stuff for stuff in Hackers]):
+                    if pid not in FullPlayerList:
+                        FullPlayerList[pid] = { 'levels': set(), 'score': 0 }
+                    FullPlayerList[pid]['levels'].add(levname)
+                    s = 0
+                    try:
+                        s = int(entry.find('score').text)
+                    finally:
+                        if s >= 0:
+                            FullPlayerList[pid]['score'] += MULT - s
+
     #Read leaderboard data and fetch scores     
-    for pid in PlayerList:
-        StatusUpdate("Calculating scores for "+pid+"...")
-        PlayerList[pid]=GetPlayerScore(pid)
-     
+    #for pid in PlayerList:
+    #    StatusUpdate("Calculating scores for "+pid+"...")
+    #    PlayerList[pid]=GetPlayerScore(pid)
+    
+    # copy from hashmap to sorting heap
+    StatusUpdate("Filtering players...")
+    for pid, pdata in FullPlayerList.iteritems():
+    #    if pdata['levels'].issuperset(Levels):
+            PlayerList[pid] = pdata['score']
+
     #Fetch Player names
     i=1
     StatusUpdate("Fetching player names\n(might take a while)")
@@ -179,7 +202,7 @@ def GlobalLeaderboards():
         try:
             f.write(str(i)+' '+name+' '+str(score)+'  '+'\n')
         except:
-            f.write(str(i)+' '+'Invalid Name'+' '+pid+str(score)+'  '+'\n')
+            f.write(str(i)+' '+'Invalid Name['+pid + '] '+str(score)+'  '+'\n')
         i+=1
         if i>n:
             break
